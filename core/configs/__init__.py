@@ -18,6 +18,11 @@ DATASET_FOLDERS = {
     'mpii-train':  os.path.join(base_dir, 'data/training-images/MPII-pose'),
     'coco-train':  os.path.join(base_dir, 'data/training-images/COCO'),
 
+    # ===== Custom real data (fzhi) =====
+    # Train + Val share the same image root; npz paths differ
+    'fzhi-custom': '/mnt/data_hdd/fzhi/output',
+    'fzhi-custom-val': '/mnt/data_hdd/fzhi/output',
+
     #BEDLAM (SMPL)
     'agora-body-bbox44': os.path.join(base_dir, 'data/training-images/images'),
     'zoom-suburbd-bbox44': os.path.join(base_dir, 'data/training-images/20221010_3-10_500_batch01hand_zoom_suburb_d_6fps/png'),
@@ -170,6 +175,8 @@ DATASET_FILES = [
         'rich-smplx': os.path.join(base_dir, 'data/test-labels/rich_test.npz'),
         'spec-test-smpl': os.path.join(base_dir, 'data/test-labels/spec_test.npz'),
         'coco-val-smpl': os.path.join(base_dir, 'data/test-labels/coco_val.npz'),
+        # Custom val/test
+        'fzhi-custom-val': os.path.join(base_dir, 'data/test-labels/fzhi_custom_val.npz'),
     },
     {
         'aic': os.path.join(base_dir, 'data//training-labels/aic-release.npz'),
@@ -177,6 +184,9 @@ DATASET_FILES = [
         'insta-2': os.path.join(base_dir, 'data//training-labels/insta2-release.npz'),
         'coco-train': os.path.join(base_dir, 'data/training-labels/coco-release.npz'),
         'mpii-train': os.path.join(base_dir, 'data/training-labels/mpii-release.npz'),
+
+        # ===== Custom real data (fzhi) =====
+        'fzhi-custom': os.path.join(base_dir, 'data/training-labels/fzhi_custom_train.npz'),
 
         # CameraHMR
         # BEDLAM1 SMPL

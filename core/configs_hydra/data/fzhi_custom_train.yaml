@@ -1,0 +1,17 @@
+# @package _global_
+#
+# 混合训练: 自定义数据 (70-80%) + COCO/MPII 预训练 (20-30%)
+#
+# 采样比例通过重复数据集名控制 (ConcatDataset 均匀采样):
+#   5x fzhi-custom + coco-train + mpii-train = 约 70-80% 自定义
+#
+# 若想调整比例:
+#   - 增加自定义: 多写几个 fzhi-custom
+#   - 增加预训练: 加 insta-1, insta-2, aic 等 (需下载对应标签和图像)
+#   - 只用自定义: DATASETS_AND_RATIOS: 'fzhi-custom'
+#
+# 用法: python train.py data=fzhi_custom_train experiment=camerahmr exp_name=xxx
+
+DATASETS:
+  DATASETS_AND_RATIOS: 'fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_coco-train_mpii-train'
+  VAL_DATASETS: fzhi-custom-val
