@@ -32,7 +32,7 @@ class DatasetTrain(Dataset):
             'replicate': cv2.BORDER_REPLICATE,
         }[cfg.DATASETS.get('BORDER_MODE', 'constant')]
 
-        self.img_dir = DATASET_FOLDERS[dataset] 
+        self.img_dir = os.path.abspath(DATASET_FOLDERS[dataset])
         self.data = np.load(DATASET_FILES[is_train][dataset], allow_pickle=True)
         self.imgname = self.data['imgname']
         self.scale = self.data['scale']
@@ -63,22 +63,57 @@ class DatasetTrain(Dataset):
         log.info(f'Loaded {self.dataset} dataset, num samples {self.length}')
 
     def __getitem__(self, index):
-        item = {}
-        scale = self.scale[index].copy()
-        center = self.center[index].copy()
-        keypoints_2d = self.keypoints[index].copy()
-        orig_keypoints_2d = self.keypoints[index].copy()
-        center_x = center[0]
-        center_y = center[1]
-        bbox_size = expand_to_aspect_ratio(scale*200, target_aspect_ratio=self.BBOX_SHAPE).max()
-        if bbox_size < 1:
-            #Todo raise proper error
-            breakpoint()
+        import random
+        max_retries = 10
+        for _ in range(max_retries):
+            item = {}
+            scale = self.scale[index].copy()
+            center = self.center[index].copy()
+            keypoints_2d = self.keypoints[index].copy()
+            orig_keypoints_2d = self.keypoints[index].copy()
+            center_x = center[0]
+            center_y = center[1]
+            bbox_size = expand_to_aspect_ratio(scale*200, target_aspect_ratio=self.BBOX_SHAPE).max()
+            if bbox_size < 1:
+                index = random.randint(0, len(self.imgname) - 1)
+                continue
 
-        augm_config = copy.deepcopy(self.cfg.DATASETS.CONFIG)
-        imgname = os.path.join(self.img_dir, self.imgname[index])
-        cv_img = cv2.imread(imgname, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
-        cv_img = cv_img[:, :, ::-1]
+            augm_config = copy.deepcopy(self.cfg.DATASETS.CONFIG)
+            img_dir_abs = os.path.abspath(self.img_dir)
+            imgname = os.path.join(img_dir_abs, self.imgname[index])
+            cv_img = None
+            # COCO: npz 里是 2014 路径，你只有 train2017 → 直接按 train2017 读，不读 2014 路径（避免 imread 报错）
+            _imgname_str = str(self.imgname[index])
+            if 'coco' in self.dataset and 'COCO_train2014_' in _imgname_str:
+                import re
+                match = re.search(r'COCO_train2014_(\d+)\.jpg', _imgname_str)
+                if match:
+                    img_id = match.group(1)
+                    for sub in ('images/train2017', 'train2017', 'images/train2014', ''):
+                        path = os.path.join(img_dir_abs, sub, img_id + '.jpg') if sub else os.path.join(img_dir_abs, img_id + '.jpg')
+                        cv_img = cv2.imread(path, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
+                        if cv_img is not None:
+                            imgname = path
+                            break
+            if cv_img is None:
+                cv_img = cv2.imread(imgname, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
+            # MPII: npz may use images/mpii-train/xxx.jpg; fallback to images/xxx.jpg or xxx.jpg
+            if cv_img is None and 'mpii' in self.dataset:
+                basename = os.path.basename(self.imgname[index])
+                for fallback_sub in ('images', ''):
+                    fallback = os.path.join(self.img_dir, fallback_sub, basename) if fallback_sub else os.path.join(self.img_dir, basename)
+                    cv_img = cv2.imread(fallback, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
+                    if cv_img is not None:
+                        imgname = fallback
+                        break
+            if cv_img is None:
+                log.warning(f"imread failed: {imgname}, retrying with another sample")
+                index = random.randint(0, len(self.imgname) - 1)
+                continue
+            cv_img = cv_img[:, :, ::-1]
+            break
+        else:
+            raise RuntimeError(f"Failed to load image after {max_retries} retries (dataset={self.dataset})")
         aspect_ratio, img_full_resized = resize_image(cv_img, 256)
         img_full_resized = np.transpose(img_full_resized.astype('float32'),
                         (2, 0, 1))/255.0

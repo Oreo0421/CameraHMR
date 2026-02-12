@@ -385,7 +385,7 @@ class CameraHMR(pl.LightningModule):
             self.log('train/grad_norm', gn, on_step=True, on_epoch=True, prog_bar=True, logger=True,sync_dist=True)
         optimizer.step()
  
-        self.log('train/loss', output['losses']['loss'], on_step=True, on_epoch=True, prog_bar=True, logger=False,sync_dist=True)
+        self.log('train/loss', output['losses']['loss'], on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         return output
 
    

@@ -88,15 +88,22 @@ class DatasetVal(Dataset):
         self.smpl_gt_neutral = smplx.SMPL(SMPL_MODEL_DIR,
                                     gender='neutral')
         
-        self.smplx_gt_male = smplx.SMPLX(SMPLX_MODEL_DIR,
-                                gender='male',flat_hand_mean=True)
-        self.smplx_gt_female = smplx.SMPLX(SMPLX_MODEL_DIR,
-                                    gender='female',flat_hand_mean=True)
-        self.smplx_gt_neutral = smplx.SMPLX(SMPLX_MODEL_DIR,
-                                    gender='neutral',flat_hand_mean=True)
-        self.smplx2smpl = pickle.load(open(SMPLX2SMPL, 'rb'))
-        self.smplx2smpl = torch.tensor(self.smplx2smpl['matrix'][None],
-                                        dtype=torch.float32)
+        try:
+            self.smplx_gt_male = smplx.SMPLX(SMPLX_MODEL_DIR,
+                                    gender='male',flat_hand_mean=True)
+            self.smplx_gt_female = smplx.SMPLX(SMPLX_MODEL_DIR,
+                                        gender='female',flat_hand_mean=True)
+            self.smplx_gt_neutral = smplx.SMPLX(SMPLX_MODEL_DIR,
+                                        gender='neutral',flat_hand_mean=True)
+            self.smplx2smpl = pickle.load(open(SMPLX2SMPL, 'rb'))
+            self.smplx2smpl = torch.tensor(self.smplx2smpl['matrix'][None],
+                                            dtype=torch.float32)
+        except (AssertionError, FileNotFoundError, OSError):
+            log.warning(f'SMPLX model not found at {SMPLX_MODEL_DIR}, skipping SMPLX init (not needed for SMPL-only eval)')
+            self.smplx_gt_male = None
+            self.smplx_gt_female = None
+            self.smplx_gt_neutral = None
+            self.smplx2smpl = None
 
         self.length = self.scale.shape[0]
         log.info(f'Loaded {self.dataset} dataset, num samples {self.length}')

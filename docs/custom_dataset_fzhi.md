@@ -34,10 +34,99 @@ CameraHMR **不提供**原始图像，你需要自行下载：
 
 | 数据集 | 下载地址 | 放到 |
 |--------|---------|------|
-| **COCO 2017 Train** | https://cocodataset.org/#download → "2017 Train images [118K/18GB]" | `data/training-images/COCO/images/` |
-| **MPII Human Pose** | http://human-pose.mpi-inf.mpg.de/#download → "Images (12.9 GB)" | `data/training-images/MPII-pose/images/` |
+| **COCO 2017 Train** | https://cocodataset.org/#download → "2017 Train images [118K/18GB]" | 解压后需为 `data/training-images/COCO/images/train2017/*.jpg`（代码会对 npz 里的 2014 路径自动回退到 `train2017/`） |
+| **COCO 2014 Train** | 见下方一键下载 | 解压后为 `data/training-images/COCO/images/train2014/*.jpg`（与 npz 内路径一致） |
+| **MPII Human Pose** | http://human-pose.mpi-inf.mpg.de/#download → "Images (12.9 GB)" | `data/training-images/MPII-pose/images/`（npz 内路径若不同则可能需改代码或只用自己的数据） |
+
+**COCO 2014 一键下载（约 13.5GB）：**
+```bash
+cd /home/fzhi/fzt/CameraHMR
+mkdir -p data/training-images/COCO/images
+wget -c http://images.cocodataset.org/zips/train2014.zip -O data/training-images/COCO/images/train2014.zip
+unzip -o data/training-images/COCO/images/train2014.zip -d data/training-images/COCO/images/
+# 解压后为 data/training-images/COCO/images/train2014/*.jpg
+rm data/training-images/COCO/images/train2014.zip   # 可选，省空间
+```
 
 > 如果你**暂时不想下载这些**，可以只用自己的数据训练。编辑 `core/configs_hydra/data/fzhi_custom_train.yaml`，把 `DATASETS_AND_RATIOS` 改为 `'fzhi-custom'`（不混入外部数据）。
+
+---
+
+## 重新混入官方训练集（COCO/MPII）
+
+1. **确保图片路径正确**
+   - COCO 2017：`data/training-images/COCO/images/train2017/*.jpg`（代码会自动从 npz 的 2014 路径回退到 train2017）
+   - MPII：`data/training-images/MPII-pose/images/076265256.jpg` 或 `MPII-pose/076265256.jpg`
+
+2. **改配置混入**
+   - 编辑 `core/configs_hydra/data/fzhi_custom_train.yaml`
+   - 把 `DATASETS_AND_RATIOS` 改成混入版（恢复注释那行）：
+     ```yaml
+     DATASETS_AND_RATIOS: 'fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_coco-train_mpii-train'
+     ```
+   - 若每 epoch batch 数 < 10000，保留 `GENERAL.VAL_STEPS: 2000`。
+
+3. **训练**
+   ```bash
+   python train.py data=fzhi_custom_train experiment=camerahmr exp_name=xxx
+   ```
+
+### 看每步 loss、预计训练时间
+
+- **终端进度条**：每个 step 的 `train/loss` 会显示在进度条上；进度条会显示当前 step、总 step 和 **ETA（预计剩余时间）**。  
+- **打印频率**：由 `GENERAL.LOG_STEPS` 控制（fzhi_custom_train 默认 50），即每 50 step 打一次 loss；改小（如 20）可更频繁看到数值。  
+- **完整曲线**：用 TensorBoard 看 `train/loss` 随 step 的变化：
+  ```bash
+  tensorboard --logdir=ckpt/train/runs
+  ```
+  在浏览器打开提示的地址即可。  
+- **大概要训多久**：跑几百个 step 后看进度条上的 **it/s 或 s/it**，用 `总 step 数 × 每 step 时间` 估算；进度条 ETA 会随训练动态更新。
+
+---
+
+## 加入其他数据集（如 PoseTrack、自建数据等）
+
+只要数据能做成 **CameraHMR 同款 npz**，就可以和 fzhi-custom、coco-train、mpii-train 一起混训。
+
+### npz 格式要求（与现有训练集一致）
+
+- **imgname**：相对「图像根目录」的路径，如 `train2017/0000001.jpg` 或 `subject/action/frame.png`
+- **scale** (N,)：每人 bbox 的 scale（与代码里 scale*200 一致）
+- **center** (N, 2)：bbox 中心 (x, y)
+- **pose_cam** (N, 72)：SMPL 姿态，global_orient(3) + body_pose(69)
+- **shape** (N, 10)：SMPL betas
+- **cam_int** (N, 3, 3)：相机内参 3×3
+- **gtkps** (N, 44, 3)：2D 关键点 (x, y, visibility)
+- 可选：**cam_ext** (N, 4, 4)、**trans_cam** (N, 3)
+
+### 操作步骤
+
+1. **准备数据**  
+   把新数据集做成上述 npz，并把所有图片放到一个「图像根目录」下，npz 里的 `imgname` 相对该根目录。
+
+2. **在配置里注册**
+   - 打开 `core/configs/__init__.py`
+   - 在 `DATASET_FOLDERS` 里加一项，例如：
+     ```python
+     'posefes-train': '/path/to/your/posefes/images/root',  # 图像根目录
+     ```
+   - 在 `DATASET_FILES[1]`（训练用）里加一项：
+     ```python
+     'posefes-train': os.path.join(base_dir, 'data/training-labels/posefes_train.npz'),
+     ```
+   - npz 实际路径和名字按你本地放的位置改。
+
+3. **加入混合训练**
+   - 编辑 `core/configs_hydra/data/fzhi_custom_train.yaml`
+   - 在 `DATASETS_AND_RATIOS` 里加上新数据集名（下划线分隔），例如：
+     ```yaml
+     DATASETS_AND_RATIOS: 'fzhi-custom_fzhi-custom_coco-train_mpii-train_posefes-train'
+     ```
+   - 比例仍通过「重复写名字」调节：名字出现越多，该数据集被采到的次数越多。
+
+4. **注意**
+   - 若新数据集没有官方 SMPL 拟合，需要自己用 HMR/VIBE/CLIFF 等先拟合出 pose/shape，再按上面格式写进 npz。
+   - **PoseFES** 若指某个具体数据集，需要其提供 SMPL 或 3D 关节标注，再转成上述 npz；若只有 2D 关键点，需要先跑一遍 SMPL 拟合流程再做成 npz。
 
 ---
 

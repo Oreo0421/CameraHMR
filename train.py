@@ -50,6 +50,14 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
 
     # Setup training and validation datasets
     datamodule = DataModule(cfg, dataset_cfg)
+    datamodule.setup('fit')
+    num_train_batches = len(datamodule.train_dataloader()['img'])
+    val_interval = cfg.trainer.val_check_interval
+    if val_interval > num_train_batches:
+        val_interval = max(1, num_train_batches // 4)
+        log.info(f"val_check_interval capped to {val_interval} (train batches per epoch: {num_train_batches})")
+    else:
+        val_interval = cfg.trainer.val_check_interval
 
     # Setup model
     if cfg.MODEL.TYPE == 'smpl':
@@ -73,7 +81,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         monitor='val_loss'
 
     )
-    rich_callback = pl.callbacks.TQDMProgressBar(refresh_rate=100)
+    rich_callback = pl.callbacks.TQDMProgressBar(refresh_rate=10)  # 进度条每 10 step 刷新，便于看 loss/ETA
     lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval='step')
     callbacks = [
         checkpoint_callback, 
@@ -81,16 +89,19 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         rich_callback
     ]
 
+    # 用 config 的 LOG_STEPS 控制 loss 打印/进度条更新频率（默认 50，越小越频繁）
+    log_every = getattr(cfg.GENERAL, 'LOG_STEPS', 50)
     trainer = pl.Trainer(
             accelerator='gpu',
             devices=1,
-            log_every_n_steps=500,
-            val_check_interval=cfg.trainer.val_check_interval,
+            log_every_n_steps=log_every,
+            val_check_interval=val_interval,
             precision='16-mixed',
             max_steps=cfg.trainer.max_steps,
             logger=loggers,
             callbacks=callbacks,
-            strategy='auto'
+            strategy='auto',
+            enable_progress_bar=True,
         )
 
     object_dict = {
