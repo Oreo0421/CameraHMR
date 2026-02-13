@@ -55,16 +55,14 @@ rm data/training-images/COCO/images/train2014.zip   # 可选，省空间
 ## 重新混入官方训练集（COCO/MPII）
 
 1. **确保图片路径正确**
-   - COCO 2017：`data/training-images/COCO/images/train2017/*.jpg`（代码会自动从 npz 的 2014 路径回退到 train2017）
-   - MPII：`data/training-images/MPII-pose/images/076265256.jpg` 或 `MPII-pose/076265256.jpg`
+   - **COCO 2014**（推荐）：解压到 `data/training-images/COCO/images/train2014/`，文件名为 `COCO_train2014_*.jpg`
+   - COCO 2017：`data/training-images/COCO/images/train2017/*.jpg`（代码会从 npz 的 2014 路径回退到 train2017）
+   - MPII：`data/training-images/MPII-pose/images/` 或 `MPII-pose/076265256.jpg`
 
-2. **改配置混入**
-   - 编辑 `core/configs_hydra/data/fzhi_custom_train.yaml`
-   - 把 `DATASETS_AND_RATIOS` 改成混入版（恢复注释那行）：
-     ```yaml
-     DATASETS_AND_RATIOS: 'fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_coco-train_mpii-train'
-     ```
-   - 若每 epoch batch 数 < 10000，保留 `GENERAL.VAL_STEPS: 2000`。
+2. **混合训练配置（已默认开启 + 缩短时间）**
+   - `fzhi_custom_train.yaml` 已设为：`DATASETS_AND_RATIOS: 'fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_coco-train'`（约 80% 自定义 + 20% COCO）
+   - `TOTAL_STEPS: 60_000`（约 1～2 天）；`VAL_STEPS: 8000`、`limit_val_batches: 0.25` 减少验证时间
+   - 要加 MPII：在末尾加 `_mpii-train`。要只用自己的数据：改为 `'fzhi-custom'`。
 
 3. **训练**
    ```bash
@@ -81,6 +79,36 @@ rm data/training-images/COCO/images/train2014.zip   # 可选，省空间
   ```
   在浏览器打开提示的地址即可。  
 - **大概要训多久**：跑几百个 step 后看进度条上的 **it/s 或 s/it**，用 `总 step 数 × 每 step 时间` 估算；进度条 ETA 会随训练动态更新。
+
+### 为什么一个 epoch 很慢？总共几个 epoch？
+
+- **按 step 训练，没有“总 epoch 数”**：代码用的是 `max_steps`（即 `GENERAL.TOTAL_STEPS`），训练会一直跑到总步数为止，不会“跑 N 个 epoch 就停”。  
+- **一个 epoch** = 把你的训练集从头到尾过一遍 = `ceil(训练样本数 / BATCH_SIZE)` 个 step。例如 10 万张图、batch_size=64，一个 epoch ≈ 1562 step。  
+- **一个 epoch 要几小时**：要么数据量很大（每 epoch 的 step 多），要么每 step 较慢（读图、ViT 前向等）。  
+- **只用自己数据时**：`fzhi_custom_train` 里已把 **TOTAL_STEPS 设为 100_000**（10 万步），这样不会按默认的 100 万步训很久。若想快速试跑可改为 `50_000`；要训满再改回 `1_000_000`。  
+- **加速建议**：显存允许可增大 `TRAIN.BATCH_SIZE`（如 128），每 epoch 的 step 数会减半；或适当增大 `GENERAL.NUM_WORKERS`（如 8～16）减轻读图瓶颈。
+
+### 修改配置后重新续跑
+
+1. **改配置**  
+   编辑 `core/configs_hydra/data/fzhi_custom_train.yaml`（或命令行覆盖，如 `general.val_steps=5000`）。
+
+2. **用同一实验名续跑**  
+   第一次跑时用了哪个 `exp_name`，续跑时**必须写同一个**，这样日志和 checkpoint 目录一致，会自动从该目录下的 `checkpoints/last.ckpt` 恢复：
+   ```bash
+   cd /home/fzhi/fzt/CameraHMR
+   python train.py data=fzhi_custom_train experiment=camerahmr exp_name=fzhi_only
+   ```
+   若第一次是 `exp_name=my_run`，就继续用 `exp_name=my_run`。
+
+3. **或显式指定 checkpoint 路径**  
+   想从别的目录的某次运行续跑，或指定某个 ckpt 文件时：
+   ```bash
+   python train.py data=fzhi_custom_train experiment=camerahmr ckpt_path=logs/train/runs/fzhi_only/checkpoints/last.ckpt
+   ```
+
+4. **输出目录**  
+   日志和 checkpoint 在：`logs/train/runs/<exp_name>/`，其中 `checkpoints/last.ckpt` 为最新权重，用于续跑。
 
 ---
 

@@ -89,8 +89,13 @@ class DatasetTrain(Dataset):
                 match = re.search(r'COCO_train2014_(\d+)\.jpg', _imgname_str)
                 if match:
                     img_id = match.group(1)
-                    for sub in ('images/train2017', 'train2017', 'images/train2014', ''):
-                        path = os.path.join(img_dir_abs, sub, img_id + '.jpg') if sub else os.path.join(img_dir_abs, img_id + '.jpg')
+                    fname_2014 = f'COCO_train2014_{img_id}.jpg'
+                    fname_2017 = img_id + '.jpg'
+                    for sub, fname in (
+                        ('images/train2014', fname_2014), ('train2014', fname_2014),
+                        ('images/train2017', fname_2017), ('train2017', fname_2017), ('', fname_2017),
+                    ):
+                        path = os.path.join(img_dir_abs, sub, fname) if sub else os.path.join(img_dir_abs, fname)
                         cv_img = cv2.imread(path, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
                         if cv_img is not None:
                             imgname = path

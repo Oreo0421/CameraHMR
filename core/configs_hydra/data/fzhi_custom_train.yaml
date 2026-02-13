@@ -1,21 +1,20 @@
 # @package _global_
 #
-# 混合训练: 自定义数据 (70-80%) + COCO/MPII 预训练 (20-30%)
-#
-# 采样比例通过重复数据集名控制 (ConcatDataset 均匀采样):
-#   5x fzhi-custom + coco-train + mpii-train = 约 70-80% 自定义
-#
-# 若想调整比例:
-#   - 增加自定义: 多写几个 fzhi-custom
-#   - 增加预训练: 加 insta-1, insta-2, aic 等 (需下载对应标签和图像)
+# 混合训练: 自定义数据（如 5 个 subject）+ COCO（约 5:1，自定义为主）
+# - 自定义 5 人: 先运行 prepare 的 --subjects 指定 5 个 ID，再训练
+# - COCO: data/training-images/COCO/images/train2014/ 或 train2017/
 # 用法: python train.py data=fzhi_custom_train experiment=camerahmr exp_name=xxx
-# 自定义数据量较小时，每 epoch 的 batch 数可能 < 10000，需降低 VAL_STEPS
 
 GENERAL:
-  VAL_STEPS: 2000   # 每 2000 step 做一次 val（须 <= 每 epoch batch 数，否则报错）
-  LOG_STEPS: 50     # 每 50 step 打一次 loss、更新进度条（改小可更频繁看 loss）
+  TOTAL_STEPS: 60_000    # 混合训练 6 万步；要更长可改 100_000
+  VAL_STEPS: 8000
+  LOG_STEPS: 50
+
+# 每次 val 只跑 25% 的 val 集，加快训练
+trainer:
+  limit_val_batches: 0.25
 
 DATASETS:
-  # 先只用自己数据训练；要混入 COCO/MPII 时改为例如 'fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_coco-train'
-  DATASETS_AND_RATIOS: 'fzhi-custom'
+  # 5× fzhi-custom + coco-train ≈ 自定义 80% + COCO 20%；要更多 COCO 可加 coco-train
+  DATASETS_AND_RATIOS: 'fzhi-custom_fzhi-custom_fzhi-custom_fzhi-custom_coco-train'
   VAL_DATASETS: fzhi-custom-val

@@ -90,12 +90,18 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     ]
 
     # 用 config 的 LOG_STEPS 控制 loss 打印/进度条更新频率（默认 50，越小越频繁）
+    # 若配置的 LOG_STEPS > 每 epoch batch 数，会自动压到每 epoch 内能看到多次 log，避免 Lightning 警告
     log_every = getattr(cfg.GENERAL, 'LOG_STEPS', 50)
+    if log_every > num_train_batches:
+        log_every = max(1, min(50, num_train_batches // 10))
+        log.info(f"log_every_n_steps capped to {log_every} (train batches per epoch: {num_train_batches})")
+    limit_val_batches = getattr(cfg.trainer, 'limit_val_batches', 1)
     trainer = pl.Trainer(
             accelerator='gpu',
             devices=1,
             log_every_n_steps=log_every,
             val_check_interval=val_interval,
+            limit_val_batches=limit_val_batches,
             precision='16-mixed',
             max_steps=cfg.trainer.max_steps,
             logger=loggers,
@@ -118,7 +124,9 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         log_hyperparameters(object_dict)
 
 
-    trainer.fit(model, datamodule=datamodule, ckpt_path='last')
+    # 续跑：用相同 exp_name 会从该次运行的 checkpoints/last.ckpt 恢复；或命令行传 ckpt_path=path/to/last.ckpt
+    ckpt_path = cfg.get('ckpt_path', 'last')
+    trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path)
 
     log.info("Fitting done")
 
