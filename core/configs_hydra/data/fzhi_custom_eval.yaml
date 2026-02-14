@@ -1,0 +1,6 @@
+# @package _global_
+# 在真实自定义 val 集上评估（用于对比不同 step 的 checkpoint）
+# 用法: python eval.py data=fzhi_custom_eval ckpt_path=/path/to/xxx.ckpt
+
+DATASETS:
+  VAL_DATASETS: fzhi-custom-val

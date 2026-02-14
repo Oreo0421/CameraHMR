@@ -1,0 +1,7 @@
+# @package _global_
+# 在真实数据 own_omni action16 上评估（仅 2D 标注 → 只报 avgpck_0.05 / avgpck_0.1）
+# 用法: 先运行 scripts/prepare_own_omni_eval.py 生成 npz，再:
+#   python eval.py data=own_omni_eval ckpt_path=/path/to/step60000.ckpt
+
+DATASETS:
+  VAL_DATASETS: own-omni-val

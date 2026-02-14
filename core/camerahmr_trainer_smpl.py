@@ -604,7 +604,7 @@ class CameraHMR(pl.LightningModule):
 
         avgpck_005 = pck1
         avgpck_01 = pck2
-        if 'coco' in dataset_names[0]:
+        if 'coco' in dataset_names[0] or 'own-omni' in dataset_names[0]:
             self.log('avgpck_0.05',avgpck_005.mean(), logger=True, sync_dist=True)
             self.log('avgpck_0.1',avgpck_01.mean(), logger=True, sync_dist=True)
         else:

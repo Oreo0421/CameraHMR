@@ -19,9 +19,11 @@ DATASET_FOLDERS = {
     'coco-train':  os.path.join(base_dir, 'data/training-images/COCO'),
 
     # ===== Custom real data (fzhi) =====
-    # Train + Val share the same image root; npz paths differ
     'fzhi-custom': '/mnt/data_hdd/fzhi/output',
     'fzhi-custom-val': '/mnt/data_hdd/fzhi/output',
+
+    # ===== 真实数据 own_omni action16（仅 2D 标注，eval 报 PCK） =====
+    'own-omni-val': '/mnt/dst_datasets/own_omni_dataset/action16_2022/rawframes',
 
     #BEDLAM (SMPL)
     'agora-body-bbox44': os.path.join(base_dir, 'data/training-images/images'),
@@ -175,8 +177,8 @@ DATASET_FILES = [
         'rich-smplx': os.path.join(base_dir, 'data/test-labels/rich_test.npz'),
         'spec-test-smpl': os.path.join(base_dir, 'data/test-labels/spec_test.npz'),
         'coco-val-smpl': os.path.join(base_dir, 'data/test-labels/coco_val.npz'),
-        # Custom val/test
         'fzhi-custom-val': os.path.join(base_dir, 'data/test-labels/fzhi_custom_val.npz'),
+        'own-omni-val': os.path.join(base_dir, 'data/test-labels/own_omni_action16_val.npz'),
     },
     {
         'aic': os.path.join(base_dir, 'data//training-labels/aic-release.npz'),

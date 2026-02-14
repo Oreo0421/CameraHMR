@@ -6,7 +6,7 @@
 # 用法: python train.py data=fzhi_custom_train experiment=camerahmr exp_name=xxx
 
 GENERAL:
-  TOTAL_STEPS: 60_000    # 混合训练 6 万步；要更长可改 100_000
+  TOTAL_STEPS: 100_000   # 混合训练 10 万步
   VAL_STEPS: 8000
   LOG_STEPS: 50
 

@@ -38,24 +38,26 @@ def eval(cfg: DictConfig) -> Tuple[dict, dict]:
     model_type = cfg.get('model_type', 'smpl')
 
     datamodule = DataModule(cfg, dataset_cfg)
-    # Setup model
+    # Setup model：若传了 ckpt_path 则用该 checkpoint（自己训的）；否则用预训练默认路径
     if cfg.MODEL.TYPE == 'smpl':
         from core.constants import CHECKPOINT_PATH
         from core.camerahmr_trainer_smpl import CameraHMR
-        checkpoint_path = CHECKPOINT_PATH  
+        checkpoint_path = cfg.get('ckpt_path') or CHECKPOINT_PATH
     elif cfg.MODEL.TYPE  == 'smplx':
         from core.constants import CHECKPOINT_PATH_SMPLX
         from core.camerahmr_trainer_smplx import CameraHMR
-        checkpoint_path = CHECKPOINT_PATH_SMPLX
+        checkpoint_path = cfg.get('ckpt_path') or CHECKPOINT_PATH_SMPLX
     else:
         raise ValueError(f"Unknown model type: {cfg.MODEL.TYPE}")
-        
 
+    log.info(f"Loading checkpoint: {checkpoint_path}")
     model = CameraHMR.load_from_checkpoint(checkpoint_path, strict=False)
-    
-    from core.constants import CAM_MODEL_CKPT
-    cam_model_checkpoint = torch.load(CAM_MODEL_CKPT)['state_dict']
-    model.cam_model.load_state_dict(cam_model_checkpoint)
+
+    # 只有用官方预训练 ckpt 时才单独加载 cam_model；自己训的 ckpt 里已含 cam_model
+    if cfg.get('ckpt_path') is None:
+        from core.constants import CAM_MODEL_CKPT
+        cam_model_checkpoint = torch.load(CAM_MODEL_CKPT)['state_dict']
+        model.cam_model.load_state_dict(cam_model_checkpoint)
 
     trainer = pl.Trainer()
 

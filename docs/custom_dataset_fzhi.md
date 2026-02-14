@@ -110,6 +110,53 @@ rm data/training-images/COCO/images/train2014.zip   # 可选，省空间
 4. **输出目录**  
    日志和 checkpoint 在：`logs/train/runs/<exp_name>/`，其中 `checkpoints/last.ckpt` 为最新权重，用于续跑。
 
+### 在真实数据上验证不同 step 的 checkpoint（选多少步用于 test）
+
+在**真实 val 集**（fzhi-custom-val）上分别跑 50k、60k、70k 等 checkpoint，看 PA-MPJPE/MPJPE 等指标，选表现最好的步数。
+
+1. **复制带等号文件名的 ckpt（避免 Hydra 解析错误）**  
+   路径里的 `epoch=4-step=70000.ckpt` 不能直接当命令行参数，先复制成无等号文件名：
+   ```bash
+   CDIR=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints
+   cp "$CDIR/epoch=3-step=50000.ckpt" "$CDIR/step50000.ckpt"
+   cp "$CDIR/epoch=4-step=60000.ckpt" "$CDIR/step60000.ckpt"
+   cp "$CDIR/epoch=4-step=70000.ckpt" "$CDIR/step70000.ckpt"
+   ```
+
+2. **在真实 val 上跑 eval（指定 data + ckpt_path）**  
+   ```bash
+   cd /home/fzhi/fzt/CameraHMR
+   # 50k
+   python eval.py data=fzhi_custom_eval ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step50000.ckpt
+   # 60k
+   python eval.py data=fzhi_custom_eval ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step60000.ckpt
+   # 70k
+   python eval.py data=fzhi_custom_eval ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step70000.ckpt
+   ```
+
+3. **看终端输出的 PA-MPJPE、MPJPE、PVE**，对比哪个 step 在你真实数据上最好，就用该 step 的 ckpt 做后续 test/部署。
+
+### 在真实数据集 own_omni action16 上验证准确率
+
+你的真实数据在 **rawframes** + **annotations_final**（COCO 格式 2D 关键点），无 3D GT，只能看 **2D 关键点准确率**（avgpck_0.05 / avgpck_0.1）。
+
+1. **生成评估用 npz（只需跑一次）**
+   ```bash
+   cd /home/fzhi/fzt/CameraHMR
+   python scripts/prepare_own_omni_eval.py \
+     --rawframes /mnt/dst_datasets/own_omni_dataset/action16_2022/rawframes \
+     --annotations /mnt/dst_datasets/own_omni_dataset/action16_2022/annotations_final \
+     --out_npz data/test-labels/own_omni_action16_val.npz
+   ```
+
+2. **用某个 checkpoint 在真实数据上跑 eval**
+   ```bash
+   python eval.py data=own_omni_eval ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step60000.ckpt
+   ```
+   终端里会打印 **avgpck_0.05**、**avgpck_0.1**（2D PCK），数值越高表示在你真实数据上 2D 关键点越准。不会报 PA-MPJPE/MPJPE（无 3D 真值）。
+
+3. **换不同 step 的 ckpt** 重复第 2 步，对比哪个 step 的 avgpck 最高，就用该 ckpt 做部署。
+
 ---
 
 ## 加入其他数据集（如 PoseTrack、自建数据等）
