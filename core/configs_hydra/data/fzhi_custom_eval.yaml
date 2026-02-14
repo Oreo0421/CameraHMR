@@ -1,6 +1,10 @@
 # @package _global_
 # 在真实自定义 val 集上评估（用于对比不同 step 的 checkpoint）
 # 用法: python eval.py data=fzhi_custom_eval ckpt_path=/path/to/xxx.ckpt
+# 完整跑: python eval.py data=fzhi_custom_eval ckpt_path=xxx.ckpt trainer.limit_test_batches=1.0
+
+trainer:
+  limit_test_batches: 0.25  # 默认只跑 25% val 集加快速度，需要完整结果时命令行覆盖为 1.0
 
 DATASETS:
   VAL_DATASETS: fzhi-custom-val

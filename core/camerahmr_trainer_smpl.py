@@ -521,25 +521,9 @@ class CameraHMR(pl.LightningModule):
                 combined_mesh.export(save_filename + "_combined.obj")
 
         else:
-            male_indices = (batch['gender'] == 0)
-            female_indices = (batch['gender'] == 1)
-            neutral_indices = ~(male_indices | female_indices)  # gender == -1 or other
-            male_batch = {k: v[male_indices] for k, v in batch['smpl_params'].items()}
-            female_batch = {k: v[female_indices] for k, v in batch['smpl_params'].items()}
-            neutral_batch = {k: v[neutral_indices] for k, v in batch['smpl_params'].items()}
-
-            # Create an empty tensor with the same shape as the original batch
-            output_shape = (batch['gender'].shape[0], 6890, 3)
-            smpl_output_gt = torch.empty(output_shape, dtype=self.smpl_gt().vertices.dtype, device=batch['gender'].device)
-
-            if male_indices.any():
-                smpl_output_gt[male_indices] = self.smpl_gt_male(**male_batch).vertices
-            if female_indices.any():
-                smpl_output_gt[female_indices] = self.smpl_gt_female(**female_batch).vertices
-            if neutral_indices.any():
-                smpl_output_gt[neutral_indices] = self.smpl_gt(**{k: v.float() for k, v in neutral_batch.items()}).vertices
-
-            gt_cam_vertices =smpl_output_gt
+            # GT vertices already computed per-sample in dataset_val __getitem__
+            # with correct gender model (male/female/neutral), reuse directly
+            gt_cam_vertices = batch['vertices']
             pred_cam_vertices = output['pred_vertices']
 
             gt_keypoints_3d = torch.matmul(J_regressor_batch_smpl, gt_cam_vertices)
@@ -616,6 +600,13 @@ class CameraHMR(pl.LightningModule):
             self.log('val_pampjpe',val_pampjpe.mean(), logger=True, sync_dist=True)
 
         self.validation_step_output.append({'val_loss': val_pve ,'val_loss_mpjpe': val_mpjpe, 'val_loss_pampjpe':val_pampjpe,  'avgpck_0.05':avgpck_005, 'avgpck_0.1':avgpck_01, 'dataloader_idx': dataloader_idx})
+
+        # Real-time per-batch printing during test
+        if getattr(self.trainer, 'testing', False):
+            if 'coco' in dataset_names[0] or 'own-omni' in dataset_names[0]:
+                print(f"  [batch {batch_idx}] avgpck_0.05={avgpck_005.mean():.4f}  avgpck_0.1={avgpck_01.mean():.4f}")
+            else:
+                print(f"  [batch {batch_idx}] PA-MPJPE={val_pampjpe.mean():.2f}  MPJPE={val_mpjpe.mean():.2f}  PVE={val_pve.mean():.2f}")
 
     def on_validation_epoch_end(self, dataloader_idx=0):
         # Flatten outputs if it's a list of lists
