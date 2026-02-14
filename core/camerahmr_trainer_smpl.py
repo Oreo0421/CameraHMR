@@ -521,21 +521,23 @@ class CameraHMR(pl.LightningModule):
                 combined_mesh.export(save_filename + "_combined.obj")
 
         else:
-            smpl_output_gt = self.smpl_gt(**{k: v.float() for k,v in batch['smpl_params'].items()})
-            male_indices = (batch['gender'] == 0)  # Assuming 0 represents males
-            female_indices = ~male_indices
+            male_indices = (batch['gender'] == 0)
+            female_indices = (batch['gender'] == 1)
+            neutral_indices = ~(male_indices | female_indices)  # gender == -1 or other
             male_batch = {k: v[male_indices] for k, v in batch['smpl_params'].items()}
             female_batch = {k: v[female_indices] for k, v in batch['smpl_params'].items()}
+            neutral_batch = {k: v[neutral_indices] for k, v in batch['smpl_params'].items()}
 
             # Create an empty tensor with the same shape as the original batch
-            output_shape = (batch['gender'].shape[0], 6890, 3)  # Assuming the output shape is the same for both models
+            output_shape = (batch['gender'].shape[0], 6890, 3)
             smpl_output_gt = torch.empty(output_shape, dtype=self.smpl_gt().vertices.dtype, device=batch['gender'].device)
 
-        # Apply the smpl_gt_male and smpl_gt_female models
             if male_indices.any():
                 smpl_output_gt[male_indices] = self.smpl_gt_male(**male_batch).vertices
             if female_indices.any():
                 smpl_output_gt[female_indices] = self.smpl_gt_female(**female_batch).vertices
+            if neutral_indices.any():
+                smpl_output_gt[neutral_indices] = self.smpl_gt(**{k: v.float() for k, v in neutral_batch.items()}).vertices
 
             gt_cam_vertices =smpl_output_gt
             pred_cam_vertices = output['pred_vertices']
