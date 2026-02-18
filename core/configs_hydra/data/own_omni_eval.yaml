@@ -1,7 +1,18 @@
 # @package _global_
 # 在真实数据 own_omni action16 上评估（仅 2D 标注 → 只报 avgpck_0.05 / avgpck_0.1）
-# 用法: 先运行 scripts/prepare_own_omni_eval.py 生成 npz，再:
-#   python eval.py data=own_omni_eval ckpt_path=/path/to/step60000.ckpt
+# 用法: CKPT_PATH=/path/to/xxx.ckpt python eval.py data=own_omni_eval experiment=camerahmr
+# 效果图默认存到 eval_vis/；命令行可覆盖 EXTRA.VIS_OUT_DIR=/mnt/data_hdd/fzhi/vis
+# 必须加 GENERAL.NUM_WORKERS=0，否则 experiment 的 16 会覆盖，多进程易卡住
+
+GENERAL:
+  NUM_WORKERS: 0
 
 DATASETS:
+  DATASETS_AND_RATIOS: null
   VAL_DATASETS: own-omni-val
+
+# 输出效果图：预测 mesh 叠在原图上
+EXTRA:
+  SAVE_VIS: true
+  VIS_OUT_DIR: /mnt/data_hdd/fzhi/vis
+  MAX_SAVE_BATCHES_VIS: 5   # 只保存前 5 个 batch，共约 20 张图

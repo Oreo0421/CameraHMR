@@ -216,26 +216,24 @@ class CameraHMR(pl.LightningModule):
         # self.perspective_projection_vis(batch, output) 
         return output, fl_h
 
-    def perspective_projection_vis(self, input_batch, output, max_save_img=1):
+    def perspective_projection_vis(self, input_batch, output, max_save_img=1, save_dir='.'):
         import os
         import cv2
-
+        os.makedirs(save_dir, exist_ok=True)
         translation = output['pred_cam_t'].detach()
         vertices = output['pred_vertices'].detach()
-        #translation = input_batch['translation'].detach()[:,:3]
-        #vertices = input_batch['gt_vertices'].detach()
         for i in range(len(input_batch['imgname'])):
             cy, cx = input_batch['img_size'][i] // 2
             img_h, img_w = cy*2, cx*2
             imgname = input_batch['imgname'][i]
-            save_filename = os.path.join('.', f'{self.global_step:08d}_{i:02d}_{os.path.basename(imgname)}')
+            save_filename = os.path.join(save_dir, f'{self.global_step:08d}_{i:02d}_{os.path.basename(imgname)}')
             # focal_length_ = (img_w * img_w + img_h * img_h) ** 0.5  # Assumed fl
     
             focal_length_ = input_batch['cam_int'][i, 0, 0]
             focal_length = (focal_length_, focal_length_)
 
             rendered_img = render_image_group(
-                image=cv2.imread(imgname),
+                image=cv2.cvtColor(cv2.imread(imgname), cv2.COLOR_BGR2RGB),
                 camera_translation=translation[i],
                 vertices=vertices[i],
                 focal_length=focal_length,
@@ -593,9 +591,12 @@ class CameraHMR(pl.LightningModule):
         if 'coco' in dataset_names[0] or 'own-omni' in dataset_names[0]:
             self.log('avgpck_0.05',avgpck_005.mean(), logger=True, sync_dist=True)
             self.log('avgpck_0.1',avgpck_01.mean(), logger=True, sync_dist=True)
+            # 无 3D 真值，3D 指标置 0 表示 N/A，避免显示无意义的 200/800
+            val_pve = torch.zeros_like(val_pve)
+            val_mpjpe = torch.zeros_like(val_mpjpe)
+            val_pampjpe = torch.zeros_like(val_pampjpe)
         else:
             self.log('val_pve',val_pve.mean(), logger=True, sync_dist=True)
-            # self.log('val_trans',val_mrpe.mean(), logger=True, sync_dist=True)
             self.log('val_mpjpe',val_mpjpe.mean(), logger=True, sync_dist=True)
             self.log('val_pampjpe',val_pampjpe.mean(), logger=True, sync_dist=True)
 
@@ -607,6 +608,16 @@ class CameraHMR(pl.LightningModule):
                 print(f"  [batch {batch_idx}] avgpck_0.05={avgpck_005.mean():.4f}  avgpck_0.1={avgpck_01.mean():.4f}")
             else:
                 print(f"  [batch {batch_idx}] PA-MPJPE={val_pampjpe.mean():.2f}  MPJPE={val_mpjpe.mean():.2f}  PVE={val_pve.mean():.2f}")
+
+        # 可选：保存效果图（eval 时设 EXTRA.SAVE_VIS=true）
+        extra = getattr(self.cfg, 'EXTRA', None)
+        if extra is not None and getattr(extra, 'SAVE_VIS', False):
+            n_batches = getattr(self, '_vis_batch_count', 0)
+            max_batches = getattr(extra, 'MAX_SAVE_BATCHES_VIS', 5)
+            if n_batches < max_batches:
+                save_dir = getattr(extra, 'VIS_OUT_DIR', 'eval_vis')
+                self.perspective_projection_vis(batch, output, max_save_img=4, save_dir=save_dir)
+                self._vis_batch_count = n_batches + 1
 
     def on_validation_epoch_end(self, dataloader_idx=0):
         # Flatten outputs if it's a list of lists
@@ -625,10 +636,16 @@ class CameraHMR(pl.LightningModule):
                 avg_pck_005_loss = torch.stack([x['avgpck_0.05'] for x in dataloader_outputs]).mean()
                 avg_pck_01_loss = torch.stack([x['avgpck_0.1'] for x in dataloader_outputs]).mean()
 
-                # avg_mrpe_loss = torch.stack([x['val_trans'] for x in dataloader_outputs]).mean()*1000
-                logger.info('PA-MPJPE: '+str(dataloader_idx)+str(avg_pampjpe_loss))
-                logger.info('MPJPE: '+str(dataloader_idx)+str(avg_mpjpe_loss))
-                logger.info('PVE: '+str(dataloader_idx)+ str(avg_val_loss))
+                val_ds_str = getattr(self.cfg.DATASETS, 'VAL_DATASETS', '') or ''
+                is_2d_only = 'coco' in val_ds_str or 'own_omni' in val_ds_str or 'own-omni' in val_ds_str
+                if is_2d_only:
+                    logger.info('PA-MPJPE: '+str(dataloader_idx)+' N/A (2D-only)')
+                    logger.info('MPJPE: '+str(dataloader_idx)+' N/A (2D-only)')
+                    logger.info('PVE: '+str(dataloader_idx)+' N/A (2D-only)')
+                else:
+                    logger.info('PA-MPJPE: '+str(dataloader_idx)+str(avg_pampjpe_loss))
+                    logger.info('MPJPE: '+str(dataloader_idx)+str(avg_mpjpe_loss))
+                    logger.info('PVE: '+str(dataloader_idx)+ str(avg_val_loss))
                 logger.info('avgpck_0.05: '+str(dataloader_idx)+str(avg_pck_005_loss))
                 logger.info('avgpck_0.1: '+str(dataloader_idx)+str(avg_pck_01_loss))
             if dataloader_idx==0:
