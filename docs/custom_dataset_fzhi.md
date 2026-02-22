@@ -123,18 +123,15 @@ rm data/training-images/COCO/images/train2014.zip   # 可选，省空间
    cp "$CDIR/epoch=4-step=70000.ckpt" "$CDIR/step70000.ckpt"
    ```
 
-2. **在真实 val 上跑 eval（指定 data + ckpt_path）**  
+2. **在真实 val 上跑 eval（data + experiment + ckpt_path）**  
    ```bash
    cd /home/fzhi/fzt/CameraHMR
-   # 50k
-   python eval.py data=fzhi_custom_eval ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step50000.ckpt
-   # 60k
-   python eval.py data=fzhi_custom_eval ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step60000.ckpt
-   # 70k
-   python eval.py data=fzhi_custom_eval ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step70000.ckpt
+   python eval.py data=fzhi_custom_eval experiment=camerahmr ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step50000.ckpt
+   # 换 60k、70k 把上面 ckpt_path 改成 step60000.ckpt、step70000.ckpt 即可
    ```
 
-3. **看终端输出的 PA-MPJPE、MPJPE、PVE**，对比哪个 step 在你真实数据上最好，就用该 step 的 ckpt 做后续 test/部署。
+3. **看终端输出的 PA-MPJPE、MPJPE、PVE**，对比哪个 step 在你真实数据上最好，就用该 step 的 ckpt 做后续 test/部署。  
+   **单位**：MPJPE、PA-MPJPE、PVE 在代码里均为 **毫米 (mm)**（`core/camerahmr_trainer_smpl.py` 里 `error.mean(-1)*1000` 将米转为 mm）。
 
 ### 在真实数据集 own_omni action16 上验证准确率
 
@@ -149,11 +146,12 @@ rm data/training-images/COCO/images/train2014.zip   # 可选，省空间
      --out_npz data/test-labels/own_omni_action16_val.npz
    ```
 
-2. **用某个 checkpoint 在真实数据上跑 eval**
+2. **用 omnilab/own_omni 验证：必须带 `experiment=camerahmr`**（否则缺 MODEL 等配置会报错）
    ```bash
-   python eval.py data=own_omni_eval ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step60000.ckpt
+   cd /home/fzhi/fzt/CameraHMR
+   python eval.py data=own_omni_eval experiment=camerahmr ckpt_path=/mnt/data_hdd/fzhi/CameraHMR/ckpt/train/runs/mixed_coco/checkpoints/step70000.ckpt
    ```
-   终端里会打印 **avgpck_0.05**、**avgpck_0.1**（2D PCK），数值越高表示在你真实数据上 2D 关键点越准。不会报 PA-MPJPE/MPJPE（无 3D 真值）。
+   终端里会打印 **avgpck_0.05**、**avgpck_0.1**（2D PCK），数值越高表示在你真实数据上 2D 关键点越准。own_omni 无 3D 真值，故不会报 PA-MPJPE/MPJPE。
 
 3. **换不同 step 的 ckpt** 重复第 2 步，对比哪个 step 的 avgpck 最高，就用该 ckpt 做部署。
 
