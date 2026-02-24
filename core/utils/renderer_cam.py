@@ -151,7 +151,7 @@ def render_overlay_image(
     valid_mask = (rend_depth > 0)[:, :, None]
     output_img = (color[:, :, :3] * valid_mask +
                   (1 - valid_mask) * image)
-    return output_img
+    return output_img, valid_mask
 
 
 def render_image_group(
@@ -169,6 +169,8 @@ def render_image_group(
         keypoints_2d: np.ndarray = None,
         cam_params: np.ndarray = None,
         correct_ori: bool = True,
+        bbox_center: np.ndarray = None,
+        bbox_size: float = None,
 ):
     to_numpy = lambda x: x.detach().cpu().numpy()
 
@@ -184,48 +186,102 @@ def render_image_group(
         camera_rotation = to_numpy(camera_rotation)
     vertices = to_numpy(vertices)
 
-    # input image to this step should be between [0,1]
-    overlay_img = render_overlay_image(
-        image=image,
-        camera_translation=camera_translation,
-        vertices=vertices,
-        camera_rotation=camera_rotation,
-        focal_length=focal_length,
-        camera_center=camera_center,
-        mesh_color=mesh_color,
-        alpha=alpha,
-        faces=faces,
-        mesh_filename=mesh_filename,
-        sideview_angle=0,
-        add_ground_plane=False,
-        correct_ori=correct_ori,
-    )
+    if bbox_center is not None and bbox_size is not None:
+        # --- 先用 bbox 裁剪图片，再在裁剪图上渲染 mesh ---
+        h, w = image.shape[:2]
+        pad = 1.3
+        half = int(bbox_size * pad / 2)
+        cx, cy = int(bbox_center[0]), int(bbox_center[1])
+        x1, y1 = max(cx - half, 0), max(cy - half, 0)
+        x2, y2 = min(cx + half, w), min(cy + half, h)
+        crop_img = image[y1:y2, x1:x2]
+        if crop_img.size == 0:
+            crop_img = image
+            x1, y1 = 0, 0
+        crop_h, crop_w = crop_img.shape[:2]
+        # 相机参数转换到裁剪坐标系
+        crop_camera_center = (camera_center[0] - x1, camera_center[1] - y1)
 
-    side_img = render_overlay_image(
-        image=np.zeros_like(image),
-        camera_translation=camera_translation,
-        vertices=vertices,
-        camera_rotation=camera_rotation,
-        focal_length=focal_length,
-        camera_center=camera_center,
-        mesh_color=mesh_color,
-        alpha=alpha,
-        faces=faces,
-        mesh_filename=mesh_filename,
-        sideview_angle=270,
-        correct_ori=correct_ori,
+        crop_overlay, crop_valid_mask = render_overlay_image(
+            image=crop_img,
+            camera_translation=camera_translation.copy(),
+            vertices=vertices,
+            camera_rotation=camera_rotation,
+            focal_length=focal_length,
+            camera_center=crop_camera_center,
+            mesh_color=mesh_color,
+            alpha=alpha,
+            faces=faces,
+            mesh_filename=mesh_filename,
+            sideview_angle=0,
+            add_ground_plane=False,
+            correct_ori=correct_ori,
+        )
+        crop_mask_raw = crop_valid_mask[:, :, 0]  # [H, W] bool
 
-    )
+        # --- 把 mask 居中放到黑色画布上 ---
+        ys, xs = np.where(crop_mask_raw)
+        if len(ys) > 0:
+            my1, my2 = ys.min(), ys.max() + 1
+            mx1, mx2 = xs.min(), xs.max() + 1
+            mask_patch = crop_mask_raw[my1:my2, mx1:mx2]
+            ph, pw = mask_patch.shape
+            canvas = np.zeros((crop_h, crop_w), dtype=np.float32)
+            # 居中放置
+            oy = (crop_h - ph) // 2
+            ox = (crop_w - pw) // 2
+            canvas[oy:oy+ph, ox:ox+pw] = mask_patch.astype(np.float32)
+            centered_mask = np.repeat(canvas[:, :, None], 3, axis=2)
+        else:
+            centered_mask = np.zeros((crop_h, crop_w, 3), dtype=np.float32)
 
-    # concatenate images horizontally
-    output_img = np.concatenate([image, overlay_img, side_img], axis=1)
+        # 裁剪后的 overlay（人+mesh 叠加）
+        # crop_overlay 已经是裁剪区域的 overlay
+
+        # 把原图 resize 到和 crop 同高，方便拼接
+        orig_resized = cv2.resize(image, (int(w * crop_h / h), crop_h))
+
+        # concatenate: 原图 | 裁剪overlay | 居中mask
+        output_img = np.concatenate([orig_resized, crop_overlay, centered_mask], axis=1)
+    else:
+        # fallback: 全图渲染
+        overlay_img, valid_mask = render_overlay_image(
+            image=image,
+            camera_translation=camera_translation.copy(),
+            vertices=vertices,
+            camera_rotation=camera_rotation,
+            focal_length=focal_length,
+            camera_center=camera_center,
+            mesh_color=mesh_color,
+            alpha=alpha,
+            faces=faces,
+            mesh_filename=mesh_filename,
+            sideview_angle=0,
+            add_ground_plane=False,
+            correct_ori=correct_ori,
+        )
+        mask_img = np.repeat(valid_mask.astype(np.float32), 3, axis=2)
+        side_img, _ = render_overlay_image(
+            image=np.zeros_like(image),
+            camera_translation=camera_translation.copy(),
+            vertices=vertices,
+            camera_rotation=camera_rotation,
+            focal_length=focal_length,
+            camera_center=camera_center,
+            mesh_color=mesh_color,
+            alpha=alpha,
+            faces=faces,
+            sideview_angle=270,
+            correct_ori=correct_ori,
+        )
+        output_img = np.concatenate([image, mask_img, overlay_img, side_img], axis=1)
 
     if save_filename is not None:
         images_save = output_img * 255
         images_save = np.clip(images_save, 0, 255).astype(np.uint8)
         cv2.imwrite(save_filename, cv2.cvtColor(images_save, cv2.COLOR_BGR2RGB))
 
-    return output_img #, overlay_img
+    return output_img
 
 
 class RendererCam:

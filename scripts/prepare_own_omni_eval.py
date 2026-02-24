@@ -67,15 +67,27 @@ def main():
     shape_list = []
     cam_int_list = []
 
+    ALLOWED_ACTIONS = {
+        'brooming', 'cleaningwindows', 'downandgetup', 'drinking',
+        'fall-on-face', 'inchairstandup', 'push-object', 'rugpull',
+        'upbendfrmknees', 'upbendfrmwaist', 'upfromground', 'walk', 'walk-old-man',
+    }
+
     json_files = sorted(ann_dir.glob("*.json"))
     for jpath in json_files:
-        # 例如 brooming_aileen_bedroom.json -> action=brooming, subdir=aileen_bedroom
         stem = jpath.stem  # brooming_aileen_bedroom
-        parts = stem.split("_", 2)  # ['brooming', 'aileen', 'bedroom'] or ['brooming', 'aileen_bedroom']
+        parts = stem.split("_", 2)
         if len(parts) < 2:
             continue
         action = parts[0]
-        subdir = "_".join(parts[1:])  # aileen_bedroom
+        # 处理含连字符的动作名（如 fall-on-face_aileen_bedroom）
+        for a in ALLOWED_ACTIONS:
+            if stem.startswith(a + '_'):
+                action = a
+                break
+        if action not in ALLOWED_ACTIONS:
+            continue
+        subdir = stem[len(action)+1:]  # aileen_bedroom
         rel_dir = f"{action}/{subdir}"
 
         with open(jpath) as f:
@@ -104,7 +116,6 @@ def main():
             gtkps_list.append(gtkps)
             pose_cam_list.append(np.zeros(24 * 3, dtype=np.float32))
             shape_list.append(np.zeros(10, dtype=np.float32))
-            # 假内参，仅用于投影
             fl = max(w, h) * 1.2
             cam_int_list.append(np.array([[fl, 0, w / 2.0], [0, fl, h / 2.0], [0, 0, 1]], dtype=np.float32))
 

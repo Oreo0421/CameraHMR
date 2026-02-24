@@ -83,4 +83,5 @@ class Dataset(torch.utils.data.Dataset):
         item['box_size'] =  bbox_size
         item['img_size'] = 1.0 * np.array([cvimg.shape[0], cvimg.shape[1]])
         item['cam_int'] = self.cam_int
+        item['_trans'] = trans
         return item

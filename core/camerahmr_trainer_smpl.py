@@ -232,6 +232,9 @@ class CameraHMR(pl.LightningModule):
             focal_length_ = input_batch['cam_int'][i, 0, 0]
             focal_length = (focal_length_, focal_length_)
 
+            bbox_center = input_batch['box_center'][i].cpu().numpy()
+            box_size = input_batch['box_size'][i].item()
+
             rendered_img = render_image_group(
                 image=cv2.cvtColor(cv2.imread(imgname), cv2.COLOR_BGR2RGB),
                 camera_translation=translation[i],
@@ -241,6 +244,8 @@ class CameraHMR(pl.LightningModule):
                 camera_rotation=None,
                 save_filename=save_filename,
                 faces=self.smpl_gt.faces,
+                bbox_center=bbox_center,
+                bbox_size=box_size,
             )
             if i >= (max_save_img - 1):
                 break
@@ -551,6 +556,16 @@ class CameraHMR(pl.LightningModule):
             focal_length=batch['cam_int'][:, 0, 0],
         )
 
+        # 鱼眼数据：只校正可视化用的 cam_t，不影响指标计算
+        if 'own-omni' in dataset_names[0]:
+            PERSON_HEIGHT = 1.7  # meters
+            fl = batch['cam_int'][:, 0, 0]
+            bbox_h = batch['box_size']
+            tz_corrected = fl * PERSON_HEIGHT / bbox_h
+            cam_t_vis = cam_t.clone()
+            cam_t_vis[:, 2] = tz_corrected
+            output['pred_cam_t'] = cam_t_vis  # 只给可视化用
+
         joints2d = perspective_projection(
             output['pred_keypoints_3d'],
             rotation=torch.eye(3, device=device).unsqueeze(0).expand(batch_size, -1, -1),
@@ -648,6 +663,36 @@ class CameraHMR(pl.LightningModule):
                     logger.info('PVE: '+str(dataloader_idx)+ str(avg_val_loss))
                 logger.info('avgpck_0.05: '+str(dataloader_idx)+str(avg_pck_005_loss))
                 logger.info('avgpck_0.1: '+str(dataloader_idx)+str(avg_pck_01_loss))
+
+                # 测试时把指标写入 txt
+                if getattr(self.trainer, 'testing', False):
+                    extra = getattr(self.cfg, 'EXTRA', None)
+                    if extra is not None:
+                        import os
+                        out_dir = getattr(extra, 'VIS_OUT_DIR', 'eval_vis')
+                        os.makedirs(out_dir, exist_ok=True)
+                        txt_path = os.path.join(out_dir, 'metrics.txt')
+                        lines = []
+                        if is_2d_only:
+                            lines.append('PA-MPJPE: N/A (2D-only)')
+                            lines.append('MPJPE:    N/A (2D-only)')
+                            lines.append('PVE:      N/A (2D-only)')
+                        else:
+                            lines.append(f'PA-MPJPE: {avg_pampjpe_loss.item():.4f}')
+                            lines.append(f'MPJPE:    {avg_mpjpe_loss.item():.4f}')
+                            lines.append(f'PVE:      {avg_val_loss.item():.4f}')
+                        lines.append(f'avgpck_0.05: {avg_pck_005_loss.item():.4f}')
+                        lines.append(f'avgpck_0.1:  {avg_pck_01_loss.item():.4f}')
+                        with open(txt_path, 'w') as f:
+                            f.write('\n'.join(lines) + '\n')
+                        logger.info(f'Metrics saved to {txt_path}')
+                        print('\n' + '='*40)
+                        print('  Test Results')
+                        print('='*40)
+                        for l in lines:
+                            print('  ' + l)
+                        print('='*40 + '\n')
+
             if dataloader_idx==0:
                 self.log('val_loss',avg_val_loss, logger=True, sync_dist=True)
 

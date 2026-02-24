@@ -14,5 +14,5 @@ DATASETS:
 # 输出效果图：预测 mesh 叠在原图上
 EXTRA:
   SAVE_VIS: true
-  VIS_OUT_DIR: /mnt/data_hdd/fzhi/vis
-  MAX_SAVE_BATCHES_VIS: 5   # 只保存前 5 个 batch，共约 20 张图
+  VIS_OUT_DIR: /mnt/data_hdd/fzhi/eval/hmr
+  MAX_SAVE_BATCHES_VIS: 999
